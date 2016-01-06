@@ -1,19 +1,53 @@
 <!DOCTYPE html>
 
 <html>
+  <head>
+    <style>
+      #count {
+        transition: opacity 0.2s;
+        -ms-transition: opacity 0.2s;
+        -moz-transition: opacity 0.2s;
+        -webkit-transition: opacity 0.2s;
+      }
+      .on {
+        opacity: 1;
+      }
+      .off {
+        opacity: 0;
+      }
+
+    </style>
+  </head>
   <body>
-    Spoken words: <h1 id="count">0</h1>
+    Please say: <h1 id="count">begin</h1>
   </body>
   <script>
 
+    var words = ["eat", "Ed", "add"];
+    if (window.location.hash.length > 3){
+      words = window.location.hash.slice(1).split(",");
+    }
     speechDetector(200, 150 /*ms*/, increment)
 
     var count = 0;
+    var listening = true;
+
     function increment(){
+      if (!listening) return;
+
+      listening = false;
       count++;
-      document.getElementById("count").innerHTML = count;
+      document.getElementById("count").className  = "off";
+      setTimeout(function(){
+        document.getElementById("count").innerHTML = randomWord();
+        document.getElementById("count").className = "on";
+        listening = true;
+      }, 1000);
     }
 
+    function randomWord(){
+      return words[Math.floor((Math.random() * words.length))]
+    }
 
     function speechDetector(THRESHOLD, DURATION, onUtterance){
 
@@ -65,17 +99,17 @@
               (now - onSince) > DURATION) {
                 wasOn = true;
               }
-          if (wasOn && (offSince > 0) && 
-              (now - offSince) > DURATION) {
-                console.log("Utterance Done", now)
-                onUtterance(now-onSince);
-                wasOn = false;
-            }
+              if (wasOn && (offSince > 0) && 
+                  (now - offSince) > DURATION) {
+                    console.log("Utterance Done", now)
+                    onUtterance(now-onSince);
+                    wasOn = false;
+                  }
 
-          onSince = -1;
-          if (offSince < 0) {
-            offSince = now;
-          }
+                  onSince = -1;
+                  if (offSince < 0) {
+                    offSince = now;
+                  }
         }
         lastCheck = now;
       }
