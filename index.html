@@ -3,6 +3,27 @@
 <html>
   <head>
     <style>
+        body {
+            background-color: black;
+        }
+        #vcenter {
+            top:50%;
+            left:50%;
+            height:300px;
+            width:600px;
+            position: absolute;
+            margin: -150px 0 0 -300px;
+        }
+        #vcenter h1 {
+            margin:auto;
+            line-height:300px;
+            vertical-align:middle;
+            color: white;
+            text-align: center;
+            font-family: "Arial";
+            font-size: 180px;
+        }
+
       #count {
       }
       .on {
@@ -19,7 +40,9 @@
     </style>
   </head>
   <body>
-    Please say: <h1 id="count">begin</h1>
+      <div id="vcenter">
+          <h1 id="count">begin</h1>
+      </div>
   </body>
   <script>
 
