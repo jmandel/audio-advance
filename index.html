@@ -62,14 +62,18 @@
       count++;
       document.getElementById("count").className  = "off";
       setTimeout(function(){
-        document.getElementById("count").innerHTML = randomWord();
+        document.getElementById("count").innerHTML = getNextWord();
         document.getElementById("count").className = "on";
         listening = true;
       }, 1000);
     }
 
-    function randomWord(){
-      return words[Math.floor((Math.random() * words.length))]
+    function getNextWord(){
+      if (count <= words.length) {	// loop through experiment word list
+        return words[count-1]
+      } else {                      // or pick random word
+        return words[Math.floor((Math.random() * words.length))]
+      }
     }
 
     function speechDetector(THRESHOLD, DURATION, onUtterance){
