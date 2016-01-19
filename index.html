@@ -1,10 +1,13 @@
 <!DOCTYPE html>
+<meta charset="UTF-8">
 
 <html>
   <head>
     <style>
         body {
             background-color: black;
+            color: white;
+            font-family: "Arial";
         }
         #vcenter {
             top:50%;
@@ -18,14 +21,10 @@
             margin:auto;
             line-height:300px;
             vertical-align:middle;
-            color: white;
             text-align: center;
-            font-family: "Arial";
             font-size: 180px;
         }
 
-      #count {
-      }
       .on {
         opacity: 1;
         transition: opacity 0.1s;
@@ -41,31 +40,47 @@
   </head>
   <body>
       <div id="vcenter">
-          <h1 id="count">begin</h1>
+          <h1 id="word">begin</h1>
+      </div>
+      <div id="pause-status">
       </div>
   </body>
   <script>
 
     var words = ["eat", "Ed", "add"];
+    var log = {startTime: new Date().getTime(), increments: [], pauses: []};
     var interstimdur_ms = 500;
     if (window.location.hash.length > 3){
       words = window.location.hash.slice(1).split(",");
     }
-    speechDetector(200, 150 /*ms*/, increment)
+    speechDetector(200, 150 /*ms*/, function(){increment("mic");})
 
     var count = 0;
-    var listening = true;
+    var readyToAdvance = true;
+    var currentWord = "";
+    var isPaused = false;
+    renderPauseStatus();
+    
+    window.addEventListener("keyup",handleKeyup)
 
-    function increment(){
-      if (!listening) return;
+    function increment(whoCalledMe){
+      if (!readyToAdvance) return;
+      if (whoCalledMe === "mic" && isPaused) return;
 
-      listening = false;
+      readyToAdvance = false;
       count++;
-      document.getElementById("count").className  = "off";
+      currentWord = getNextWord();
+      log.increments.push({
+        t: new Date().getTime()-log.startTime,
+        count: count,
+        word: currentWord,
+        source: whoCalledMe
+      })
+      document.getElementById("word").className  = "off";
       setTimeout(function(){
-        document.getElementById("count").innerHTML = getNextWord();
-        document.getElementById("count").className = "on";
-        listening = true;
+        document.getElementById("word").innerHTML = currentWord;
+        document.getElementById("word").className = "on";
+        readyToAdvance = true;
       }, interstimdur_ms);
     }
 
@@ -75,6 +90,29 @@
       } else {                      // or pick random word
         return words[Math.floor((Math.random() * words.length))]
       }
+    }
+    
+    function handleKeyup(e){
+      if (e.code == "Space") {
+        isPaused = !isPaused;
+        renderPauseStatus();
+        log.pauses.push({
+            t: new Date().getTime()-log.startTime,
+            status: isPaused
+        })
+      } else if (e.code == "ArrowRight") {
+        increment("keyboard")
+      } else if (e.code == "KeyL") {
+        displayLog();
+      }
+    }
+    
+    function renderPauseStatus(){
+       document.getElementById("pause-status").innerHTML = isPaused ? "[ paused ]" : "";
+    }
+    
+    function displayLog(){
+       window.open('data:application/json;' + 'base64,'+btoa(JSON.stringify(log,null,2)));
     }
 
     function speechDetector(THRESHOLD, DURATION, onUtterance){
