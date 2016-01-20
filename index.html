@@ -48,12 +48,12 @@
   <script>
 
     var words = ["eat", "Ed", "add"];
-    var log = {startTime: new Date().getTime(), increments: [], pauses: []};
+    var log = {startTime: new Date().getTime(), utterances: [], pauses: []};
     var interstimdur_ms = 500;
     if (window.location.hash.length > 3){
       words = window.location.hash.slice(1).split(",");
     }
-    speechDetector(200, 150 /*ms*/, function(){increment("mic");})
+    speechDetector(200, 150 /*ms*/, function(){requestNextUtterance("mic");})
 
     var count = 0;
     var readyToAdvance = true;
@@ -63,14 +63,14 @@
     
     window.addEventListener("keyup",handleKeyup)
 
-    function increment(whoCalledMe){
+    function requestNextUtterance(whoCalledMe){
       if (!readyToAdvance) return;
       if (whoCalledMe === "mic" && isPaused) return;
 
       readyToAdvance = false;
       count++;
       currentWord = getNextWord();
-      log.increments.push({
+      log.utterances.push({
         t: new Date().getTime()-log.startTime,
         count: count,
         word: currentWord,
@@ -101,7 +101,7 @@
             status: isPaused
         })
       } else if (e.code == "ArrowRight") {
-        increment("keyboard")
+        requestNextUtterance("keyboard")
       } else if (e.code == "KeyL") {
         displayLog();
       }
