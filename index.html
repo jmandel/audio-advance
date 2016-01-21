@@ -13,9 +13,9 @@
             top:50%;
             left:50%;
             height:300px;
-            width:600px;
+            width:1800px;
             position: absolute;
-            margin: -150px 0 0 -300px;
+            margin: -150px 0 0 -900px;
         }
         #vcenter h1 {
             margin:auto;
@@ -53,25 +53,45 @@
     if (window.location.hash.length > 3){
       words = window.location.hash.slice(1).split(",");
     }
-    speechDetector(200, 150 /*ms*/, function(){increment("mic");})
+    speechDetector(200 /*vol*/, 150 /*ms*/, 75 /*ms*/, function(uttStartTime,duration){increment("mic",uttStartTime);})
 
     var count = 0;
     var readyToAdvance = true;
     var currentWord = "";
     var isPaused = false;
+    var onBreak = false;
+    var pausedAt = {};
+    var TRIALS_PER_BLOCK = 30;
+
     renderPauseStatus();
     
     window.addEventListener("keyup",handleKeyup)
 
-    function increment(whoCalledMe){
+    function increment(whoCalledMe,uttStartTime){
+      console.log(whoCalledMe, readyToAdvance, currentWord, isPaused);
       if (!readyToAdvance) return;
       if (whoCalledMe === "mic" && isPaused) return;
+      if (count !== 0 && count%TRIALS_PER_BLOCK === 0 && !pausedAt[count]) {
+        pausedAt[count] = true;
+        onBreak = true;
+        document.getElementById("word").innerHTML = "[break time]";
+        isPaused = true;
+        renderPauseStatus();
+        return;
+      }
+
+      if (count !==0) {
+        var lastWordAppearTime = log.startTime + log.increments[log.increments.length-1].t + interstimdur_ms;
+        if (uttStartTime < lastWordAppearTime) {
+          return;
+        }
+      }
 
       readyToAdvance = false;
       count++;
       currentWord = getNextWord();
       log.increments.push({
-        t: new Date().getTime()-log.startTime,
+        t: now()-log.startTime,
         count: count,
         word: currentWord,
         source: whoCalledMe
@@ -100,7 +120,12 @@
             t: new Date().getTime()-log.startTime,
             status: isPaused
         })
+        if (onBreak){
+          onBreak = false;
+          increment("keyboard")
+        }
       } else if (e.code == "ArrowRight") {
+        onBreak = false;
         increment("keyboard")
       } else if (e.code == "KeyL") {
         displayLog();
@@ -115,7 +140,11 @@
        window.open('data:application/json;' + 'base64,'+btoa(JSON.stringify(log,null,2)));
     }
 
-    function speechDetector(THRESHOLD, DURATION, onUtterance){
+    function now(){
+       return new Date().getTime();
+    }
+
+    function speechDetector(THRESHOLD, DURATION, OFFDURATION, onUtterance){
 
       navigator.getUserMedia = (
         navigator.getUserMedia ||
@@ -155,27 +184,26 @@
         if (sum > THRESHOLD){
           if (onSince < 0){
             onSince = now;
+            uttStartTime = now;
           }
           wasOn = false;
           offSince = -1;
           //console.log("ON", onSince, now, now - onSince)
         } else {
           //console.log("OFF", onSince, now)
-          if ((onSince > 0) &&
-              (now - onSince) > DURATION) {
+          if ((onSince > 0) && (now - onSince) > DURATION) {
                 wasOn = true;
-              }
-              if (wasOn && (offSince > 0) && 
-                  (now - offSince) > DURATION) {
-                    console.log("Utterance Done", now)
-                    onUtterance(now-onSince);
-                    wasOn = false;
-                  }
+          }
+          if (wasOn && (offSince > 0) && (now - offSince) > OFFDURATION) {
+                console.log("Utterance Done", now, onSince, now-onSince)
+                onUtterance(uttStartTime, now-uttStartTime);
+                wasOn = false;
+           }
 
-                  onSince = -1;
-                  if (offSince < 0) {
-                    offSince = now;
-                  }
+           onSince = -1;
+           if (offSince < 0) {
+             offSince = now;
+           }
         }
         lastCheck = now;
       }
