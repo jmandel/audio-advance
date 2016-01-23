@@ -53,7 +53,7 @@
     if (window.location.hash.length > 3){
       words = window.location.hash.slice(1).split(",");
     }
-    speechDetector(200 /*vol*/, 150 /*ms*/, 75 /*ms*/, function(uttStartTime,duration){increment("mic",uttStartTime);})
+    speechDetector(200 /*vol*/, 150 /*ms*/, 75 /*ms*/, function(uttStartTime,duration){increment("mic",uttStartTime,duration);})
 
     var count = 0;
     var readyToAdvance = true;
@@ -67,7 +67,7 @@
     
     window.addEventListener("keyup",handleKeyup)
 
-    function increment(whoCalledMe,uttStartTime){
+    function increment(whoCalledMe,uttStartTime,duration){
       console.log(whoCalledMe, readyToAdvance, currentWord, isPaused);
       if (!readyToAdvance) return;
       if (whoCalledMe === "mic" && isPaused) return;
@@ -94,7 +94,9 @@
         t: now()-log.startTime,
         count: count,
         word: currentWord,
-        source: whoCalledMe
+        source: whoCalledMe,
+        uttStartTime: uttStartTime,
+        duration: duration
       })
       document.getElementById("word").className  = "off";
       setTimeout(function(){
