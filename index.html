@@ -48,12 +48,17 @@
   <script>
 
     var words = ["eat", "Ed", "add"];
-    var log = {startTime: new Date().getTime(), increments: [], pauses: []};
+    var log = {startTime: new Date().getTime(), trials: [], pauses: []};
     var interstimdur_ms = 500;
     if (window.location.hash.length > 3){
       words = window.location.hash.slice(1).split(",");
     }
-    speechDetector(200 /*vol*/, 150 /*ms*/, 75 /*ms*/, function(uttStartTime,duration){increment("mic",uttStartTime,duration);})
+    speechDetector(200 /*vol*/,
+                   150 /*utterance min length ms*/,
+                   75 /*post-utt silence min length ms*/,
+                   function(uttStartTime,duration){
+                     requestNextTrial("mic",uttStartTime,duration);
+                   })
 
     var count = 0;
     var readyToAdvance = true;
@@ -67,7 +72,7 @@
     
     window.addEventListener("keyup",handleKeyup)
 
-    function increment(whoCalledMe,uttStartTime,duration){
+    function requestNextTrial(whoCalledMe,uttStartTime,duration){
       console.log(whoCalledMe, readyToAdvance, currentWord, isPaused);
       if (!readyToAdvance) return;
       if (whoCalledMe === "mic" && isPaused) return;
@@ -77,11 +82,15 @@
         document.getElementById("word").innerHTML = "[break time]";
         isPaused = true;
         renderPauseStatus();
+        log.pauses.push({
+            t: new Date().getTime()-log.startTime,
+            status: isPaused
+        })
         return;
       }
 
       if (count !==0) {
-        var lastWordAppearTime = log.startTime + log.increments[log.increments.length-1].t + interstimdur_ms;
+        var lastWordAppearTime = log.startTime + log.trials[log.trials.length-1].t + interstimdur_ms;
         if (uttStartTime < lastWordAppearTime) {
           return;
         }
@@ -90,7 +99,7 @@
       readyToAdvance = false;
       count++;
       currentWord = getNextWord();
-      log.increments.push({
+      log.trials.push({
         t: now()-log.startTime,
         count: count,
         word: currentWord,
@@ -124,11 +133,11 @@
         })
         if (onBreak){
           onBreak = false;
-          increment("keyboard")
+          requestNextTrial("keyboard")
         }
       } else if (e.code == "ArrowRight") {
         onBreak = false;
-        increment("keyboard")
+        requestNextTrial("keyboard")
       } else if (e.code == "KeyL") {
         displayLog();
       }
