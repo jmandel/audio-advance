@@ -57,7 +57,7 @@ function speechDetector(THRESHOLD, DURATION, OFFDURATION, onUtterance) {
         wasOn = true;
       }
       if (wasOn && (offSince > 0) && (now - offSince) > OFFDURATION) {
-        console.log("Utterance Done", now, onSince, now - onSince)
+        //console.log("Utterance Done", now, onSince, now - onSince)
         onUtterance(uttStartTime, now - uttStartTime);
         wasOn = false;
       }
