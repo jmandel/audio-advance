@@ -48,22 +48,25 @@
   <script src="speechDetector.js">
   </script>
   <script>
-
-    var words = ["eat", "Ed", "add"];
-    var log = {startTime: new Date().getTime(), trials: [], pauses: []};
     if (window.location.hash.length > 3){
       words = window.location.hash.slice(1).split(",");
     }
+
+    var words = ["eat", "Ed", "add"];    
     
     var INTERTRIAL_DUR_MS = 500;
-    var TRIALS_PER_BLOCK = 30;
+    var TRIALS_PER_BLOCK = 3;
+    var PAGE_LOAD_TIME = new Date().getTime();
+    
     var state = {};
     
     updateState({
+      trialNum: 0,
       trials: [],
-      currentWord: "begin",
-      isPaused: false,
-      isBreak: false,
+      endings: [],
+      currentWord: null,
+      isPaused: true,
+      isBreak: true,
       readyToAdvance: true
     });
     
@@ -79,11 +82,11 @@
     }
     
     function renderScreen(state){
-    console.log("Rendering", state);
+       console.log("Rendering", state);
        document.getElementById("pause-status").innerHTML = state.isPaused ? "[ paused ]" : "";
        var text = "";
        var textClass = "on";
-       if (state.isBreak) {
+       if (state.isBreak && state.trialNum > 0) {
           text = "[break time]";
        } else {
           text = state.currentWord;
@@ -96,13 +99,18 @@
     window.addEventListener("keydown",handleKeydown)
     
     function startTrial(e) {
+       var word = getNextWord();
+       var wordStartTime = now();
+       var trialNum = state.trialNum+1;
        updateState({
           trials: state.trials.concat({
-            word: state.currentWord,
-            startTime: state.currentWordStartTime
+             trialNum: trialNum,
+             startTime: wordStartTime,
+             word: word
           }),
-          currentWord: getNextWord(),
-          currentWordStartTime: now()
+          trialNum: trialNum,
+          currentWord: word,
+          currentWordStartTime: wordStartTime
        })
     }
     
@@ -112,6 +120,14 @@
     
     function endTrial(e) {
        updateState({
+          endings: state.endings.concat(state.trialNum === 0 ? [] : {
+             trialNum: state.trialNum,
+             word: state.currentWord,
+             uttStartTime: e.uttStartTime || null,
+             uttDuration: e.uttDuration || null,
+             source: e.source,
+             endTime: now()
+          }),
           currentWord: null
        })
        // TODO: log it!
@@ -133,6 +149,7 @@
     }
     
     function detectedUtterance(uttStartTime,uttDuration) {
+       uttStartTime -= PAGE_LOAD_TIME;
        if (state.trials.length>0 && !state.currentWord){
           return;
        }
@@ -166,7 +183,9 @@
             isBreak : false,
             isPaused : false
           })
-          startTrial();
+          setTimeout(function(){
+            startTrial();
+          }, INTERTRIAL_DUR_MS);
         } else {
           updateState({isPaused : !state.isPaused})
         }
@@ -175,19 +194,39 @@
         updateState({
             isBreak : false
         })
-        endTrial()
+        endTrial({source: "keyboard"})
         return false;
       } else if (e.code == "KeyL") {
         displayLog();
       }
     }
+    
+    function createLog(){
+      var ret = [];
+      for (var i=0; i<state.endings.length; i++){
+         ret.push({
+           trialNum: state.trials[i].trialNum,
+           word: state.trials[i].word,
+           startTime: state.trials[i].startTime,
+           uttStartTime: state.endings[i].uttStartTime,
+           uttDuration: state.endings[i].uttDuration,
+           endTime: state.endings[i].endTime,
+           source: state.endings[i].source
+         });
+         if (state.endings[i].trialNum !== state.trials[i].trialNum){
+           console.log("Trial num mismatch", i, state.trials[i], state.endings[i]);
+           throw "Bad logs"
+         }
+      }
+      return ret;
+    }
         
     function displayLog(){
-       window.open('data:application/json;' + 'base64,'+btoa(JSON.stringify(log,null,2)));
+       window.open('data:application/json;' + 'base64,'+btoa(JSON.stringify(createLog(),null,2)));
     }
 
     function now(){
-       return new Date().getTime();
+       return new Date().getTime() - PAGE_LOAD_TIME;
     }
 
   </script>
