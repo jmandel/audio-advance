@@ -1,118 +1,241 @@
 <!DOCTYPE html>
+<meta charset="UTF-8">
 
 <html>
-  <head>
-    <style>
-      #count {
-      }
-      .on {
-        opacity: 1;
-        transition: opacity 0.1s;
-        -ms-transition: opacity 0.1s;
-        -moz-transition: opacity 0.1s;
-        -webkit-transition: opacity 0.1s;
-      }
-      .off {
-        opacity: 0;
-      }
 
-    </style>
-  </head>
-  <body>
-    Please say: <h1 id="count">begin</h1>
-  </body>
-  <script>
-
-    var words = ["eat", "Ed", "add"];
-    if (window.location.hash.length > 3){
-      words = window.location.hash.slice(1).split(",");
+<head>
+  <style>
+    body {
+      background-color: black;
+      color: white;
+      font-family: "Arial";
     }
-    speechDetector(200, 150 /*ms*/, increment)
-
-    var count = 0;
-    var listening = true;
-
-    function increment(){
-      if (!listening) return;
-
-      listening = false;
-      count++;
-      document.getElementById("count").className  = "off";
-      setTimeout(function(){
-        document.getElementById("count").innerHTML = randomWord();
-        document.getElementById("count").className = "on";
-        listening = true;
-      }, 1000);
+    
+    #vcenter {
+      top: 50%;
+      left: 50%;
+      height: 300px;
+      width: 1800px;
+      position: absolute;
+      margin: -150px 0 0 -900px;
     }
+    
+    #vcenter h1 {
+      margin: auto;
+      line-height: 300px;
+      vertical-align: middle;
+      text-align: center;
+      font-size: 180px;
+    }
+    
+    .on {
+      opacity: 1;
+      transition: opacity 0.1s;
+      -ms-transition: opacity 0.1s;
+      -moz-transition: opacity 0.1s;
+      -webkit-transition: opacity 0.1s;
+    }
+    
+    .off {
+      opacity: 0;
+    }
+  </style>
+</head>
 
-    function randomWord(){
+<body>
+  <div id="vcenter">
+    <h1 id="word">begin</h1>
+  </div>
+  <div id="pause-status">
+  </div>
+</body>
+<script src="speechDetector.js">
+</script>
+<script>
+  if (window.location.hash.length > 3) {
+    words = window.location.hash.slice(1).split(",");
+  }
+
+  var words = ["eat", "Ed", "add"];
+
+  var INTERTRIAL_DUR_MS = 500;
+  var TRIALS_PER_BLOCK = 30;
+  var PAGE_LOAD_TIME = new Date().getTime();
+
+  var state = {};
+
+  updateState({
+    trialNum: 0,
+    trials: [],
+    endings: [],
+    currentWord: null,
+    isPaused: true,
+    isBreak: true,
+    readyToAdvance: true
+  });
+
+  speechDetector(200 /*vol*/ ,
+    150 /*utterance min length ms*/ ,
+    75 /*post-utt silence min length ms*/ ,
+    detectedUtterance)
+
+  // updateState({isPaused: false})
+  function updateState(newState) {
+    Object.keys(newState).forEach(function(k) {
+      state[k] = newState[k]
+    });
+    renderScreen(state);
+  }
+
+  function renderScreen(state) {
+    console.log("Rendering", state);
+    document.getElementById("pause-status").innerHTML = state.isPaused ? "[ paused ]" : "";
+    var text = "";
+    var textClass = "on";
+    if (state.isBreak && state.trialNum > 0) {
+      text = "[break time]";
+    } else {
+      text = state.currentWord;
+      textClass = state.currentWord ? "on" : "off";
+    }
+    document.getElementById("word").innerHTML = text;
+    document.getElementById("word").className = textClass
+  }
+
+  window.addEventListener("keydown", handleKeydown)
+
+  function startTrial(e) {
+    var word = getNextWord();
+    var wordStartTime = now();
+    var trialNum = state.trialNum + 1;
+    updateState({
+      trials: state.trials.concat({
+        trialNum: trialNum,
+        startTime: wordStartTime,
+        word: word
+      }),
+      trialNum: trialNum,
+      currentWord: word,
+      currentWordStartTime: wordStartTime
+    })
+  }
+
+  function needBreak(state) {
+    return state.trials.length > 0 && state.trials.length % TRIALS_PER_BLOCK === 0;
+  }
+
+  function endTrial(e) {
+    updateState({
+        endings: state.endings.concat(state.trialNum === 0 ? [] : {
+          trialNum: state.trialNum,
+          word: state.currentWord,
+          uttStartTime: e.uttStartTime || null,
+          uttDuration: e.uttDuration || null,
+          source: e.source,
+          endTime: now()
+        }),
+        currentWord: null
+      })
+      // TODO: log it!
+
+    setTimeout(function() {
+      if (needBreak(state)) {
+        startBreak(e);
+      } else {
+        startTrial(e)
+      }
+    }, INTERTRIAL_DUR_MS);
+  }
+
+  function startBreak(e) {
+    updateState({
+      isBreak: true,
+      isPaused: true
+    });
+  }
+
+  function detectedUtterance(uttStartTime, uttDuration) {
+    uttStartTime -= PAGE_LOAD_TIME;
+    if (state.trials.length > 0 && !state.currentWord) {
+      return;
+    }
+    if (state.isPaused) {
+      return;
+    }
+    if (uttStartTime < state.currentWordStartTime) {
+      return;
+    }
+    endTrial({
+      source: "mic",
+      uttStartTime: uttStartTime,
+      uttDuration: uttDuration
+    });
+  }
+
+  function getNextWord() {
+    var count = state.trials.length;
+    if (count < words.length) { // loop through experiment word list
+      return words[count]
+    } else { // or pick random word
       return words[Math.floor((Math.random() * words.length))]
     }
+  }
 
-    function speechDetector(THRESHOLD, DURATION, onUtterance){
-
-      navigator.getUserMedia = (
-        navigator.getUserMedia ||
-          navigator.webkitGetUserMedia ||
-            navigator.mozGetUserMedia ||
-              navigator.msGetUserMedia
-      );
-
-      var audioCtx = new AudioContext();
-      var scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
-
-      navigator.getUserMedia({audio:true}, success, function(e) {
-        alert('Error capturing audio.');
-      });
-
-      var source = null;
-      function success(e){
-        source = audioCtx.createMediaStreamSource(e);
-        source.connect(scriptNode);
-        source.onended = function() {
-          source.disconnect(scriptNode);
-          scriptNode.disconnect(audioCtx.destination);
-          console.log("Disconnected source");
-        }
+  function handleKeydown(e) {
+    if (e.code == "Space") {
+      e.preventDefault();
+      if (state.isBreak) {
+        updateState({
+          isBreak: false,
+          isPaused: false
+        })
+        setTimeout(function() {
+          startTrial();
+        }, INTERTRIAL_DUR_MS);
+      } else {
+        updateState({
+          isPaused: !state.isPaused
+        })
       }
+    } else if (e.code == "ArrowRight") {
+      e.preventDefault();
+      updateState({
+        isBreak: false
+      })
+      endTrial({
+        source: "keyboard"
+      })
+      return false;
+    } else if (e.code == "KeyL") {
+      displayLog();
+    }
+  }
 
-      scriptNode.connect(audioCtx.destination);
-      var onSince = -1, offSince = -1, lastCheck = -1, wasOn = false;
-
-      // Give the node a function to process audio events
-      scriptNode.onaudioprocess = function(audioProcessingEvent) {
-        var inputBuffer = audioProcessingEvent.inputBuffer;
-        var outputBuffer = audioProcessingEvent.outputBuffer;
-        var data = inputBuffer.getChannelData(0);
-        var sum = data.reduce(function(a,b){return a+Math.abs(b);}, 0);
-        var now = new Date().getTime();
-        if (sum > THRESHOLD){
-          if (onSince < 0){
-            onSince = now;
-          }
-          wasOn = false;
-          offSince = -1;
-          //console.log("ON", onSince, now, now - onSince)
-        } else {
-          //console.log("OFF", onSince, now)
-          if ((onSince > 0) &&
-              (now - onSince) > DURATION) {
-                wasOn = true;
-              }
-              if (wasOn && (offSince > 0) && 
-                  (now - offSince) > DURATION) {
-                    console.log("Utterance Done", now)
-                    onUtterance(now-onSince);
-                    wasOn = false;
-                  }
-
-                  onSince = -1;
-                  if (offSince < 0) {
-                    offSince = now;
-                  }
-        }
-        lastCheck = now;
+  function createLog() {
+    var ret = [];
+    for (var i = 0; i < state.endings.length; i++) {
+      ret.push({
+        trialNum: state.trials[i].trialNum,
+        word: state.trials[i].word,
+        startTime: state.trials[i].startTime,
+        uttStartTime: state.endings[i].uttStartTime,
+        uttDuration: state.endings[i].uttDuration,
+        endTime: state.endings[i].endTime,
+        source: state.endings[i].source
+      });
+      if (state.endings[i].trialNum !== state.trials[i].trialNum) {
+        console.log("Trial num mismatch", i, state.trials[i], state.endings[i]);
+        throw "Bad logs"
       }
     }
+    return ret;
+  }
 
-  </script>
+  function displayLog() {
+    window.open('data:application/json;' + 'base64,' + btoa(JSON.stringify(createLog(), null, 2)));
+  }
+
+  function now() {
+    return new Date().getTime() - PAGE_LOAD_TIME;
+  }
+</script>
