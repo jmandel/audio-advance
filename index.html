@@ -45,179 +45,149 @@
       <div id="pause-status">
       </div>
   </body>
+  <script src="speechDetector.js">
+  </script>
   <script>
 
     var words = ["eat", "Ed", "add"];
     var log = {startTime: new Date().getTime(), trials: [], pauses: []};
-    var interstimdur_ms = 500;
     if (window.location.hash.length > 3){
       words = window.location.hash.slice(1).split(",");
     }
+    
+    var INTERTRIAL_DUR_MS = 500;
+    var TRIALS_PER_BLOCK = 30;
+    var state = {};
+    
+    updateState({
+      trials: [],
+      currentWord: "begin",
+      isPaused: false,
+      isBreak: false,
+      readyToAdvance: true
+    });
+    
     speechDetector(200 /*vol*/,
                    150 /*utterance min length ms*/,
                    75 /*post-utt silence min length ms*/,
-                   function(uttStartTime,duration){
-                     requestNextTrial("mic",uttStartTime,duration);
-                   })
-
-    var count = 0;
-    var readyToAdvance = true;
-    var currentWord = "";
-    var isPaused = false;
-    var onBreak = false;
-    var pausedAt = {};
-    var TRIALS_PER_BLOCK = 30;
-
-    renderPauseStatus();
+                   detectedUtterance)
+                   
+    // updateState({isPaused: false})
+    function updateState(newState){
+       Object.keys(newState).forEach(function(k){state[k]=newState[k]});
+       renderScreen(state);
+    }
     
-    window.addEventListener("keyup",handleKeyup)
-
-    function requestNextTrial(whoCalledMe,uttStartTime,duration){
-      console.log(whoCalledMe, readyToAdvance, currentWord, isPaused);
-      if (!readyToAdvance) return;
-      if (whoCalledMe === "mic" && isPaused) return;
-      if (count !== 0 && count%TRIALS_PER_BLOCK === 0 && !pausedAt[count]) {
-        pausedAt[count] = true;
-        onBreak = true;
-        document.getElementById("word").innerHTML = "[break time]";
-        isPaused = true;
-        renderPauseStatus();
-        log.pauses.push({
-            t: new Date().getTime()-log.startTime,
-            status: isPaused
-        })
-        return;
-      }
-
-      if (count !==0) {
-        var lastWordAppearTime = log.startTime + log.trials[log.trials.length-1].t + interstimdur_ms;
-        if (uttStartTime < lastWordAppearTime) {
+    function renderScreen(state){
+    console.log("Rendering", state);
+       document.getElementById("pause-status").innerHTML = state.isPaused ? "[ paused ]" : "";
+       var text = "";
+       var textClass = "on";
+       if (state.isBreak) {
+          text = "[break time]";
+       } else {
+          text = state.currentWord;
+          textClass =  state.currentWord ? "on" : "off";
+       }
+       document.getElementById("word").innerHTML = text;
+       document.getElementById("word").className = textClass
+    }
+    
+    window.addEventListener("keydown",handleKeydown)
+    
+    function startTrial(e) {
+       updateState({
+          trials: state.trials.concat({
+            word: state.currentWord,
+            startTime: state.currentWordStartTime
+          }),
+          currentWord: getNextWord(),
+          currentWordStartTime: now()
+       })
+    }
+    
+    function needBreak(state){
+      return state.trials.length > 0 && state.trials.length%TRIALS_PER_BLOCK === 0;
+    }
+    
+    function endTrial(e) {
+       updateState({
+          currentWord: null
+       })
+       // TODO: log it!
+       
+       setTimeout(function(){
+         if (needBreak(state)){
+            startBreak(e);
+         } else {
+            startTrial(e)
+         }
+       }, INTERTRIAL_DUR_MS);      
+    }
+    
+    function startBreak(e) {
+       updateState({
+          isBreak: true,
+          isPaused: true
+       });
+    }
+    
+    function detectedUtterance(uttStartTime,uttDuration) {
+       if (state.trials.length>0 && !state.currentWord){
           return;
-        }
-      }
-
-      readyToAdvance = false;
-      count++;
-      currentWord = getNextWord();
-      log.trials.push({
-        t: now()-log.startTime,
-        count: count,
-        word: currentWord,
-        source: whoCalledMe,
-        uttStartTime: uttStartTime,
-        duration: duration
-      })
-      document.getElementById("word").className  = "off";
-      setTimeout(function(){
-        document.getElementById("word").innerHTML = currentWord;
-        document.getElementById("word").className = "on";
-        readyToAdvance = true;
-      }, interstimdur_ms);
+       }
+       if (state.isPaused) {
+          return;
+       }
+       if (uttStartTime < state.currentWordStartTime){
+          return;
+       }
+       endTrial({
+          source: "mic",
+          uttStartTime: uttStartTime,
+          uttDuration: uttDuration
+       });
     }
 
     function getNextWord(){
-      if (count <= words.length) {	// loop through experiment word list
-        return words[count-1]
+      var count = state.trials.length;
+      if (count < words.length) {	// loop through experiment word list
+        return words[count]
       } else {                      // or pick random word
         return words[Math.floor((Math.random() * words.length))]
       }
     }
     
-    function handleKeyup(e){
+    function handleKeydown(e){
       if (e.code == "Space") {
-        isPaused = !isPaused;
-        renderPauseStatus();
-        log.pauses.push({
-            t: new Date().getTime()-log.startTime,
-            status: isPaused
-        })
-        if (onBreak){
-          onBreak = false;
-          requestNextTrial("keyboard")
+        e.preventDefault();
+        if (state.isBreak){
+          updateState({
+            isBreak : false,
+            isPaused : false
+          })
+          startTrial();
+        } else {
+          updateState({isPaused : !state.isPaused})
         }
       } else if (e.code == "ArrowRight") {
-        onBreak = false;
-        requestNextTrial("keyboard")
+        e.preventDefault();
+        updateState({
+            isBreak : false
+        })
+        endTrial()
+        return false;
       } else if (e.code == "KeyL") {
         displayLog();
       }
     }
-    
-    function renderPauseStatus(){
-       document.getElementById("pause-status").innerHTML = isPaused ? "[ paused ]" : "";
-    }
-    
+        
     function displayLog(){
        window.open('data:application/json;' + 'base64,'+btoa(JSON.stringify(log,null,2)));
     }
 
     function now(){
        return new Date().getTime();
-    }
-
-    function speechDetector(THRESHOLD, DURATION, OFFDURATION, onUtterance){
-
-      navigator.getUserMedia = (
-        navigator.getUserMedia ||
-          navigator.webkitGetUserMedia ||
-            navigator.mozGetUserMedia ||
-              navigator.msGetUserMedia
-      );
-
-      var audioCtx = new AudioContext();
-      var scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
-
-      navigator.getUserMedia({audio:true}, success, function(e) {
-        alert('Error capturing audio.');
-      });
-
-      var source = null;
-      function success(e){
-        source = audioCtx.createMediaStreamSource(e);
-        source.connect(scriptNode);
-        source.onended = function() {
-          source.disconnect(scriptNode);
-          scriptNode.disconnect(audioCtx.destination);
-          console.log("Disconnected source");
-        }
-      }
-
-      scriptNode.connect(audioCtx.destination);
-      var onSince = -1, offSince = -1, lastCheck = -1, wasOn = false;
-
-      // Give the node a function to process audio events
-      scriptNode.onaudioprocess = function(audioProcessingEvent) {
-        var inputBuffer = audioProcessingEvent.inputBuffer;
-        var outputBuffer = audioProcessingEvent.outputBuffer;
-        var data = inputBuffer.getChannelData(0);
-        var sum = data.reduce(function(a,b){return a+Math.abs(b);}, 0);
-        var now = new Date().getTime();
-        if (sum > THRESHOLD){
-          if (onSince < 0){
-            onSince = now;
-            uttStartTime = now;
-          }
-          wasOn = false;
-          offSince = -1;
-          //console.log("ON", onSince, now, now - onSince)
-        } else {
-          //console.log("OFF", onSince, now)
-          if ((onSince > 0) && (now - onSince) > DURATION) {
-                wasOn = true;
-          }
-          if (wasOn && (offSince > 0) && (now - offSince) > OFFDURATION) {
-                console.log("Utterance Done", now, onSince, now-onSince)
-                onUtterance(uttStartTime, now-uttStartTime);
-                wasOn = false;
-           }
-
-           onSince = -1;
-           if (offSince < 0) {
-             offSince = now;
-           }
-        }
-        lastCheck = now;
-      }
     }
 
   </script>
